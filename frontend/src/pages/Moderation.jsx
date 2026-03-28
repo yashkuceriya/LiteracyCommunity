@@ -8,15 +8,19 @@ export default function Moderation() {
   const [flags, setFlags] = useState([]);
   const [actions, setActions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [reviewNotes, setReviewNotes] = useState({});
+  const [warnReason, setWarnReason] = useState({});
+  const [showWarnForm, setShowWarnForm] = useState({});
   const toast = useToast();
 
   useEffect(() => {
     setLoading(true);
+    setError(false);
     if (tab === 'flags') {
-      api.get('/moderation/flagged/').then((r) => setFlags(r.data || [])).catch(() => {}).finally(() => setLoading(false));
+      api.get('/moderation/flagged/').then((r) => setFlags(r.data || [])).catch(() => setError(true)).finally(() => setLoading(false));
     } else {
-      api.get('/moderation/actions/').then((r) => setActions(r.data || [])).catch(() => {}).finally(() => setLoading(false));
+      api.get('/moderation/actions/').then((r) => setActions(r.data || [])).catch(() => setError(true)).finally(() => setLoading(false));
     }
   }, [tab]);
 
@@ -33,9 +37,15 @@ export default function Moderation() {
   };
 
   const takeAction = async (userId, action, reason) => {
+    if (!reason?.trim()) {
+      toast?.error('Please provide a reason.');
+      return;
+    }
     try {
       await api.post(`/moderation/users/${userId}/action/`, { action, reason });
       toast?.success(`User ${action} action taken.`);
+      setShowWarnForm((prev) => ({ ...prev, [userId]: false }));
+      setWarnReason((prev) => ({ ...prev, [userId]: '' }));
     } catch {
       toast?.error('Failed to take action.');
     }
@@ -49,9 +59,9 @@ export default function Moderation() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-8 bg-gray-100 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 mb-8 bg-gray-100 rounded-lg p-1 w-fit" role="tablist">
         {[['flags', 'Flagged Messages'], ['actions', 'Action Log']].map(([key, label]) => (
-          <button key={key} onClick={() => setTab(key)}
+          <button key={key} onClick={() => setTab(key)} role="tab" aria-selected={tab === key}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
               tab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}>
@@ -61,13 +71,19 @@ export default function Moderation() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16">
+        <div className="flex justify-center py-16" role="status" aria-label="Loading">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+        </div>
+      ) : error ? (
+        <div className="text-center py-20 bg-white border border-gray-100 rounded-xl">
+          <span className="material-symbols-outlined text-gray-300 text-5xl mb-4 block" aria-hidden="true">error</span>
+          <p className="font-headline font-bold text-lg">Failed to load data</p>
+          <p className="text-sm text-gray-500 mt-1">Please try refreshing the page.</p>
         </div>
       ) : tab === 'flags' ? (
         flags.length === 0 ? (
           <div className="text-center py-20 bg-white border border-gray-100 rounded-xl">
-            <span className="material-symbols-outlined text-gray-300 text-5xl mb-4 block">verified_user</span>
+            <span className="material-symbols-outlined text-gray-300 text-5xl mb-4 block" aria-hidden="true">verified_user</span>
             <p className="font-headline font-bold text-lg">No flagged messages</p>
             <p className="text-sm text-gray-500 mt-1">The community is in good shape</p>
           </div>
@@ -105,27 +121,48 @@ export default function Moderation() {
                 )}
 
                 {flag.status === 'pending' && (
-                  <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-gray-100">
-                    <input type="text" placeholder="Moderator notes (optional)..."
-                      value={reviewNotes[flag.id] || ''}
-                      onChange={(e) => setReviewNotes((prev) => ({ ...prev, [flag.id]: e.target.value }))}
-                      className="flex-1 min-w-[200px] bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-                    <button onClick={() => reviewFlag(flag.id, 'reviewed')}
-                      className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-500">
-                      Action Needed
-                    </button>
-                    <button onClick={() => reviewFlag(flag.id, 'dismissed')}
-                      className="px-4 py-2 border border-gray-200 text-sm font-medium rounded-lg hover:bg-gray-50">
-                      Dismiss
-                    </button>
-                    {flag.message_detail?.sender && (
-                      <button onClick={() => {
-                        const reason = prompt('Reason for warning this user:');
-                        if (reason) takeAction(flag.message_detail.sender, 'warn', reason);
-                      }}
-                        className="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-500">
-                        Warn User
+                  <div className="pt-4 border-t border-gray-100 space-y-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <input type="text" placeholder="Moderator notes (optional)..."
+                        value={reviewNotes[flag.id] || ''}
+                        onChange={(e) => setReviewNotes((prev) => ({ ...prev, [flag.id]: e.target.value }))}
+                        aria-label="Moderator notes"
+                        className="flex-1 min-w-[200px] bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                      <button onClick={() => reviewFlag(flag.id, 'reviewed')}
+                        aria-label="Mark as action needed"
+                        className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-500">
+                        Action Needed
                       </button>
+                      <button onClick={() => reviewFlag(flag.id, 'dismissed')}
+                        aria-label="Dismiss this flag"
+                        className="px-4 py-2 border border-gray-200 text-sm font-medium rounded-lg hover:bg-gray-50">
+                        Dismiss
+                      </button>
+                      {flag.message_detail?.sender && (
+                        <button onClick={() => setShowWarnForm((prev) => ({ ...prev, [flag.message_detail.sender]: !prev[flag.message_detail.sender] }))}
+                          className="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-500">
+                          Warn User
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Inline warn form (replaces browser prompt) */}
+                    {flag.message_detail?.sender && showWarnForm[flag.message_detail.sender] && (
+                      <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <input type="text" placeholder="Reason for warning..."
+                          value={warnReason[flag.message_detail.sender] || ''}
+                          onChange={(e) => setWarnReason((prev) => ({ ...prev, [flag.message_detail.sender]: e.target.value }))}
+                          aria-label="Reason for warning this user"
+                          className="flex-1 bg-white border border-amber-200 rounded-lg px-3 py-2 text-sm" />
+                        <button onClick={() => takeAction(flag.message_detail.sender, 'warn', warnReason[flag.message_detail.sender])}
+                          className="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-500 shrink-0">
+                          Confirm
+                        </button>
+                        <button onClick={() => setShowWarnForm((prev) => ({ ...prev, [flag.message_detail.sender]: false }))}
+                          className="px-4 py-2 border border-amber-200 text-sm font-medium rounded-lg hover:bg-amber-50 shrink-0">
+                          Cancel
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
@@ -143,11 +180,11 @@ export default function Moderation() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left">
                 <tr>
-                  <th className="px-6 py-3 font-medium text-gray-500">Date</th>
-                  <th className="px-6 py-3 font-medium text-gray-500">Moderator</th>
-                  <th className="px-6 py-3 font-medium text-gray-500">Target</th>
-                  <th className="px-6 py-3 font-medium text-gray-500">Action</th>
-                  <th className="px-6 py-3 font-medium text-gray-500">Reason</th>
+                  <th scope="col" className="px-6 py-3 font-medium text-gray-500">Date</th>
+                  <th scope="col" className="px-6 py-3 font-medium text-gray-500">Moderator</th>
+                  <th scope="col" className="px-6 py-3 font-medium text-gray-500">Target</th>
+                  <th scope="col" className="px-6 py-3 font-medium text-gray-500">Action</th>
+                  <th scope="col" className="px-6 py-3 font-medium text-gray-500">Reason</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">

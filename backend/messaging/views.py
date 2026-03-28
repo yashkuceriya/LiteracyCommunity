@@ -2,7 +2,6 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.db.models import Q
 from accounts.models import User
 from .models import Conversation, Message
 from .serializers import ConversationListSerializer, ConversationDetailSerializer, MessageSerializer
@@ -43,14 +42,23 @@ def conversation_list(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def conversation_detail(request, pk):
+    # Moderators can view any conversation
+    is_mod = request.user.role in ('moderator', 'admin')
     try:
-        conv = Conversation.objects.prefetch_related('participants', 'messages').get(pk=pk, participants=request.user)
+        if is_mod:
+            conv = Conversation.objects.prefetch_related('participants', 'messages').get(pk=pk)
+        else:
+            conv = Conversation.objects.prefetch_related('participants', 'messages').get(pk=pk, participants=request.user)
     except Conversation.DoesNotExist:
         return Response({'error': 'Conversation not found.'}, status=status.HTTP_404_NOT_FOUND)
 
     # Mark messages as read
     conv.messages.filter(is_read=False).exclude(sender=request.user).update(is_read=True)
-    return Response(ConversationDetailSerializer(conv).data)
+
+    data = ConversationDetailSerializer(conv).data
+    data['is_participant'] = request.user in conv.participants.all()
+    data['is_moderator_view'] = is_mod and not data['is_participant']
+    return Response(data)
 
 
 @api_view(['POST'])
@@ -64,9 +72,55 @@ def send_message(request, pk):
     content = request.data.get('content', '').strip()
     if not content:
         return Response({'error': 'Message content is required.'}, status=status.HTTP_400_BAD_REQUEST)
+    if len(content) > 2000:
+        return Response({'error': 'Message too long (2000 character limit).'}, status=status.HTTP_400_BAD_REQUEST)
 
     msg = Message.objects.create(conversation=conv, sender=request.user, content=content)
     conv.save()  # Update updated_at
+    return Response(MessageSerializer(msg).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def moderator_join(request, pk):
+    """Allow moderators to join any conversation and participate."""
+    if request.user.role not in ('moderator', 'admin'):
+        return Response({'error': 'Moderator access required.'}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        conv = Conversation.objects.get(pk=pk)
+    except Conversation.DoesNotExist:
+        return Response({'error': 'Conversation not found.'}, status=status.HTTP_404_NOT_FOUND)
+    if request.user not in conv.participants.all():
+        conv.participants.add(request.user)
+    # Also create system message announcing moderator entry
+    Message.objects.create(
+        conversation=conv, sender=request.user,
+        content=f"[Moderator {request.user.get_full_name()} has joined this conversation]"
+    )
+    conv.save()
+    return Response(ConversationDetailSerializer(conv).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def moderator_send_message(request, pk):
+    """Allow moderators to send messages in any conversation (even without being a participant)."""
+    if request.user.role not in ('moderator', 'admin'):
+        return Response({'error': 'Moderator access required.'}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        conv = Conversation.objects.get(pk=pk)
+    except Conversation.DoesNotExist:
+        return Response({'error': 'Conversation not found.'}, status=status.HTTP_404_NOT_FOUND)
+    content = request.data.get('content', '').strip()
+    if not content:
+        return Response({'error': 'Message content is required.'}, status=status.HTTP_400_BAD_REQUEST)
+    if len(content) > 2000:
+        return Response({'error': 'Message too long (2000 character limit).'}, status=status.HTTP_400_BAD_REQUEST)
+    # Auto-join if not already a participant
+    if request.user not in conv.participants.all():
+        conv.participants.add(request.user)
+    msg = Message.objects.create(conversation=conv, sender=request.user, content=content)
+    conv.save()
     return Response(MessageSerializer(msg).data, status=status.HTTP_201_CREATED)
 
 

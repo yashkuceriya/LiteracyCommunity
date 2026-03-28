@@ -17,7 +17,7 @@ export default function Conversation() {
   const messagesEnd = useRef(null);
 
   const fetchConvo = () =>
-    api.get(`/messaging/conversations/${id}/`).then((r) => setConversation(r.data)).catch(() => {}).finally(() => setLoading(false));
+    api.get(`/messaging/conversations/${id}/`).then((r) => setConversation(r.data)).catch(() => setConversation(null)).finally(() => setLoading(false));
 
   useEffect(() => {
     fetchConvo();
@@ -37,7 +37,7 @@ export default function Conversation() {
       await api.post(`/messaging/conversations/${id}/messages/`, { content: newMessage });
       setNewMessage('');
       fetchConvo();
-    } catch {} finally { setSending(false); }
+    } catch { toast?.error('Failed to send message.'); } finally { setSending(false); }
   };
 
   const handleFlag = async (messageId) => {
@@ -56,12 +56,38 @@ export default function Conversation() {
   if (!conversation) return <div className="text-center py-24 text-gray-500">Conversation not found</div>;
 
   const others = conversation.participants.filter((p) => p.id !== user?.id);
+  const isModView = conversation.is_moderator_view;
+  const isMod = user?.role === 'moderator' || user?.role === 'admin';
+
+  const handleModJoin = async () => {
+    try {
+      await api.post(`/messaging/conversations/${id}/join/`);
+      toast?.success('You have joined this conversation as a moderator.');
+      fetchConvo();
+    } catch {
+      toast?.error('Failed to join conversation.');
+    }
+  };
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-6 py-4 flex flex-col h-[calc(100vh-4rem)]">
+      {/* Moderator Banner */}
+      {isModView && (
+        <div className="bg-amber-50 border border-amber-200 rounded-t-xl px-6 py-3 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2 text-amber-800 text-sm">
+            <span className="material-symbols-outlined text-base">shield</span>
+            <span className="font-medium">Moderator View</span> — You are viewing this conversation as a moderator
+          </div>
+          <button onClick={handleModJoin}
+            className="px-4 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded-lg hover:bg-amber-500 transition-all">
+            Join Conversation
+          </button>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="bg-white border border-gray-100 rounded-t-xl px-6 py-4 flex items-center gap-4 shrink-0">
-        <Link to="/messages" className="material-symbols-outlined text-gray-400 hover:text-gray-700 text-xl">arrow_back</Link>
+      <div className={`bg-white border border-gray-100 ${isModView ? '' : 'rounded-t-xl'} px-6 py-4 flex items-center gap-4 shrink-0`}>
+        <Link to={isMod ? '/moderation' : '/messages'} className="material-symbols-outlined text-gray-400 hover:text-gray-700 text-xl" aria-label="Back to messages">arrow_back</Link>
         <div className="w-10 h-10 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-sm font-bold shrink-0">
           {(others[0]?.first_name?.[0] || '?').toUpperCase()}
         </div>
@@ -97,7 +123,8 @@ export default function Conversation() {
                   </span>
                   {!isMe && (
                     <button onClick={() => setFlaggingId(flaggingId === msg.id ? null : msg.id)}
-                      className="text-[10px] text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                      className="text-[10px] text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label="Flag this message">
                       Flag
                     </button>
                   )}

@@ -67,31 +67,24 @@ export default function MemberCard({ profile, score, breakdown, onMessage }) {
       {breakdown && (
         <div className="mt-4 pt-4 border-t border-gray-100">
           <p className="text-[11px] font-medium text-gray-400 mb-2 uppercase tracking-wider">Match Breakdown</p>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            {breakdown.shared_problems && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Shared Challenges</span>
-                <span className="font-medium">{breakdown.shared_problems.count} ({breakdown.shared_problems.score}pts)</span>
+          <div className="space-y-2">
+            {[
+              { label: 'Challenges', score: breakdown.shared_problems?.score || 0, max: 45, detail: breakdown.shared_problems?.count ? `${breakdown.shared_problems.count} shared` : null },
+              { label: 'District Type', score: breakdown.district_type?.score || 0, max: 15, detail: breakdown.district_type?.match ? 'Match' : 'Different' },
+              { label: 'Size', score: breakdown.district_size?.score || 0, max: 15 },
+              { label: 'FRL %', score: breakdown.free_reduced_lunch?.score || 0, max: 10 },
+              { label: 'ESL %', score: breakdown.esl?.score || 0, max: 10 },
+              { label: 'State', score: breakdown.same_state?.score || 0, max: 5, detail: breakdown.same_state?.match ? 'Same' : 'Diff' },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-2 text-xs">
+                <span className="text-gray-400 w-16 text-right truncate">{item.label}</span>
+                <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                  <div className={`h-full rounded-full ${item.score > 0 ? 'bg-emerald-500' : 'bg-gray-200'}`}
+                    style={{ width: `${item.max > 0 ? (item.score / item.max) * 100 : 0}%` }} />
+                </div>
+                <span className="text-gray-500 w-14 text-right">{item.detail || `${item.score}/${item.max}`}</span>
               </div>
-            )}
-            {breakdown.district_type && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">District Type</span>
-                <span className="font-medium">{breakdown.district_type.match ? 'Match' : 'Different'}</span>
-              </div>
-            )}
-            {breakdown.district_size && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Size</span>
-                <span className="font-medium">{breakdown.district_size.score}pts</span>
-              </div>
-            )}
-            {breakdown.same_state && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Same State</span>
-                <span className="font-medium">{breakdown.same_state.match ? 'Yes' : 'No'}</span>
-              </div>
-            )}
+            ))}
           </div>
         </div>
       )}

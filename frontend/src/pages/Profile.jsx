@@ -35,13 +35,13 @@ export default function Profile() {
         setDistrictSearch(p.district.name);
         setDistricts([p.district]);
       }
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch(() => toast?.error('Failed to load profile data.')).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
     if (districtSearch.length < 2) { setDistricts([]); return; }
     const t = setTimeout(() => {
-      api.get(`/community/districts/?search=${encodeURIComponent(districtSearch)}`).then((r) => setDistricts(r.data || [])).catch(() => {});
+      api.get(`/community/districts/?search=${encodeURIComponent(districtSearch)}`).then((r) => setDistricts(r.data || [])).catch(() => setDistricts([]));
     }, 300);
     return () => clearTimeout(t);
   }, [districtSearch]);

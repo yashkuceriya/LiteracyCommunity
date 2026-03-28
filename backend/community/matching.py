@@ -46,13 +46,13 @@ def calculate_match_score(profile1, profile2):
         breakdown['district_size'] = {'score': size_score}
 
         # Free/Reduced Lunch %
-        frl_diff = abs(float(d1.free_reduced_lunch_pct) - float(d2.free_reduced_lunch_pct))
+        frl_diff = abs(float(d1.free_reduced_lunch_pct or 0) - float(d2.free_reduced_lunch_pct or 0))
         frl_score = max(0, int(10 - frl_diff / 5))
         score += frl_score
         breakdown['free_reduced_lunch'] = {'score': frl_score, 'diff': round(frl_diff, 1)}
 
         # ESL %
-        esl_diff = abs(float(d1.esl_pct) - float(d2.esl_pct))
+        esl_diff = abs(float(d1.esl_pct or 0) - float(d2.esl_pct or 0))
         esl_score = max(0, int(10 - esl_diff / 5))
         score += esl_score
         breakdown['esl'] = {'score': esl_score, 'diff': round(esl_diff, 1)}
@@ -74,9 +74,9 @@ def find_matches(profile, queryset=None, min_score=10):
     from .models import MemberProfile
 
     if queryset is None:
-        queryset = MemberProfile.objects.filter(is_public=True).exclude(pk=profile.pk)
+        queryset = MemberProfile.objects.filter(is_public=True, user__is_active=True).exclude(pk=profile.pk)
     else:
-        queryset = queryset.exclude(pk=profile.pk)
+        queryset = queryset.filter(user__is_active=True).exclude(pk=profile.pk)
 
     queryset = queryset.select_related('district', 'user').prefetch_related('problem_statements')
 

@@ -22,7 +22,7 @@ export default function Register() {
     try {
       await register(form);
       toast?.success(`Welcome, ${form.first_name}! Let's set up your profile.`);
-      navigate('/profile');
+      navigate('/onboarding');
     } catch (err) {
       const d = err.response?.data;
       setError(d ? Object.values(d).flat().join(' ') : 'Registration failed.');

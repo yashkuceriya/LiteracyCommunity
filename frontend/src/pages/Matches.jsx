@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/client';
+import { useToast } from '../store/ToastContext';
 import MemberCard from '../components/MemberCard';
 
 export default function Matches() {
@@ -8,6 +9,7 @@ export default function Matches() {
   const [loading, setLoading] = useState(true);
   const [hasProfile, setHasProfile] = useState(true);
   const navigate = useNavigate();
+  const toast = useToast();
 
   useEffect(() => {
     api.get('/community/matches/')
@@ -22,16 +24,26 @@ export default function Matches() {
     try {
       const { data } = await api.post('/messaging/conversations/', { recipient_id: userId });
       navigate(`/messages/${data.id}`);
-    } catch {}
+    } catch {
+      toast?.error('Failed to start conversation.');
+    }
   };
 
   if (loading) return <div className="flex justify-center py-24"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" /></div>;
 
   return (
     <main className="max-w-7xl mx-auto px-6 md:px-12 py-10">
-      <div className="mb-8">
-        <h1 className="font-headline text-3xl font-extrabold tracking-tight">Your Matches</h1>
-        <p className="text-gray-500 mt-1">Leaders matched by district demographics and shared challenges</p>
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
+        <div>
+          <h1 className="font-headline text-3xl font-extrabold tracking-tight">Your Matches</h1>
+          <p className="text-gray-500 mt-1">Leaders matched by district demographics and shared challenges</p>
+        </div>
+        {matches.length > 0 && (
+          <a href="/api/community/matches/export/" target="_blank" rel="noopener noreferrer"
+            className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:border-gray-400 transition-all flex items-center gap-2">
+            <span className="material-symbols-outlined text-base">download</span>Export CSV
+          </a>
+        )}
       </div>
 
       {!hasProfile ? (

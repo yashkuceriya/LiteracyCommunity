@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from accounts.serializers import UserSerializer
-from .models import District, ProblemStatement, MemberProfile
+from .models import District, ProblemStatement, MemberProfile, Announcement
 
 
 class DistrictSerializer(serializers.ModelSerializer):
@@ -50,3 +50,12 @@ class MatchResultSerializer(serializers.Serializer):
     profile = MemberProfileSerializer()
     score = serializers.IntegerField()
     breakdown = serializers.DictField()
+
+
+class AnnouncementSerializer(serializers.ModelSerializer):
+    author_detail = UserSerializer(source='author', read_only=True)
+
+    class Meta:
+        model = Announcement
+        fields = ['id', 'title', 'content', 'author', 'author_detail', 'pinned', 'created_at']
+        read_only_fields = ['id', 'author', 'created_at']

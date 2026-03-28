@@ -20,10 +20,11 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed bottom-6 right-6 z-50 space-y-2">
+      <div className="fixed bottom-6 right-6 z-50 space-y-2" aria-live="polite">
         {toasts.map((t) => (
           <div
             key={t.id}
+            role="alert"
             className={`px-5 py-3 rounded-lg shadow-lg text-sm font-medium animate-[slideIn_0.3s_ease-out] ${
               t.type === 'success' ? 'bg-emerald-600 text-white' :
               t.type === 'error' ? 'bg-red-600 text-white' :

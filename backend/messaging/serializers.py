@@ -29,12 +29,10 @@ class ConversationListSerializer(serializers.ModelSerializer):
         return MessageSerializer(msg).data if msg else None
 
     def get_unread_count(self, obj):
-        user = self.context.get('request', {})
-        if hasattr(user, 'user'):
-            user = user.user
-        else:
-            return 0
-        return obj.messages.filter(is_read=False).exclude(sender=user).count()
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user:
+            return obj.messages.filter(is_read=False).exclude(sender=request.user).count()
+        return 0
 
 
 class ConversationDetailSerializer(serializers.ModelSerializer):

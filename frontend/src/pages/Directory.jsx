@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
+import { useToast } from '../store/ToastContext';
 import MemberCard from '../components/MemberCard';
 
 const STATES = [
@@ -10,11 +11,13 @@ const STATES = [
 export default function Directory() {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [problemStatements, setProblemStatements] = useState([]);
   const [filters, setFilters] = useState({ search: '', state: '', district_type: '', size: '', problem: '' });
   const navigate = useNavigate();
+  const toast = useToast();
 
   useEffect(() => {
     api.get('/community/problem-statements/').then((r) => setProblemStatements(r.data || [])).catch(() => {});
@@ -22,12 +25,13 @@ export default function Directory() {
 
   useEffect(() => {
     setLoading(true);
+    setError(false);
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
     params.set('page', page);
     api.get(`/community/directory/?${params}`)
       .then((r) => { setMembers(r.data.results || []); setTotalCount(r.data.count || 0); })
-      .catch(() => {})
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [filters, page]);
 
@@ -37,7 +41,9 @@ export default function Directory() {
     try {
       const { data } = await api.post('/messaging/conversations/', { recipient_id: userId });
       navigate(`/messages/${data.id}`);
-    } catch {}
+    } catch {
+      toast?.error('Failed to start conversation.');
+    }
   };
 
   const totalPages = Math.ceil(totalCount / 20);
@@ -54,13 +60,16 @@ export default function Directory() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <input type="text" placeholder="Search members..." value={filters.search}
             onChange={(e) => updateFilter('search', e.target.value)}
+            aria-label="Search members"
             className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
           <select value={filters.state} onChange={(e) => updateFilter('state', e.target.value)}
+            aria-label="Filter by state"
             className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
             <option value="">All States</option>
             {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
           <select value={filters.district_type} onChange={(e) => updateFilter('district_type', e.target.value)}
+            aria-label="Filter by district type"
             className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
             <option value="">All Types</option>
             <option value="urban">Urban</option>
@@ -69,6 +78,7 @@ export default function Directory() {
             <option value="town">Town</option>
           </select>
           <select value={filters.size} onChange={(e) => updateFilter('size', e.target.value)}
+            aria-label="Filter by district size"
             className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
             <option value="">All Sizes</option>
             <option value="small">Small (&lt;1K)</option>
@@ -77,6 +87,7 @@ export default function Directory() {
             <option value="very_large">Very Large (25K+)</option>
           </select>
           <select value={filters.problem} onChange={(e) => updateFilter('problem', e.target.value)}
+            aria-label="Filter by challenge area"
             className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
             <option value="">All Challenges</option>
             {problemStatements.map((ps) => <option key={ps.id} value={ps.id}>{ps.title}</option>)}
@@ -84,8 +95,9 @@ export default function Directory() {
         </div>
         {Object.values(filters).some((v) => v) && (
           <button onClick={() => { setFilters({ search: '', state: '', district_type: '', size: '', problem: '' }); setPage(1); }}
-            className="mt-3 text-sm text-red-600 hover:text-red-700 flex items-center gap-1">
-            <span className="material-symbols-outlined text-sm">close</span>Clear filters
+            className="mt-3 text-sm text-red-600 hover:text-red-700 flex items-center gap-1"
+            aria-label="Clear all filters">
+            <span className="material-symbols-outlined text-sm" aria-hidden="true">close</span>Clear filters
           </button>
         )}
       </div>
@@ -99,28 +111,36 @@ export default function Directory() {
             </div>
           ))}
         </div>
+      ) : error ? (
+        <div className="text-center py-20 bg-white border border-gray-100 rounded-xl">
+          <span className="material-symbols-outlined text-gray-300 text-5xl mb-4 block" aria-hidden="true">error</span>
+          <p className="font-headline font-bold text-lg">Failed to load directory</p>
+          <p className="text-sm text-gray-500 mt-1">Please try refreshing the page.</p>
+        </div>
       ) : members.length > 0 ? (
         <>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {members.map((m) => <MemberCard key={m.id} profile={m} onMessage={handleMessage} />)}
           </div>
           {totalPages > 1 && (
-            <div className="mt-10 flex items-center justify-center gap-2">
+            <nav className="mt-10 flex items-center justify-center gap-2" aria-label="Pagination">
               <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                aria-label="Previous page"
                 className="px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-30">
                 Previous
               </button>
               <span className="text-sm text-gray-500 px-4">Page {page} of {totalPages}</span>
               <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                aria-label="Next page"
                 className="px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-30">
                 Next
               </button>
-            </div>
+            </nav>
           )}
         </>
       ) : (
         <div className="text-center py-20 bg-white border border-gray-100 rounded-xl">
-          <span className="material-symbols-outlined text-gray-300 text-5xl mb-4 block">search_off</span>
+          <span className="material-symbols-outlined text-gray-300 text-5xl mb-4 block" aria-hidden="true">search_off</span>
           <p className="font-headline font-bold text-lg">No members found</p>
           <p className="text-sm text-gray-500 mt-1">Try adjusting your filters</p>
         </div>

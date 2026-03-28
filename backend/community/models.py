@@ -65,3 +65,17 @@ class MemberProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.get_full_name()} — {self.district or 'No District'}"
+
+
+class Announcement(models.Model):
+    title = models.CharField(max_length=255)
+    content = models.TextField(max_length=2000)
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='announcements')
+    pinned = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-pinned', '-created_at']
+
+    def __str__(self):
+        return self.title

@@ -8,30 +8,70 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [hasProfile, setHasProfile] = useState(null);
   const [topMatches, setTopMatches] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [stats, setStats] = useState({ members: 0, districts: 0, problems: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    api.get('/community/profile/')
-      .then((r) => {
+    Promise.allSettled([
+      api.get('/community/profile/').then((r) => {
         setHasProfile(!!(r.data.district || r.data.problem_statements?.length));
-      })
-      .catch(() => setHasProfile(false));
-
-    api.get('/community/matches/')
-      .then((r) => setTopMatches((r.data || []).slice(0, 3)))
-      .catch(() => {});
-
-    api.get('/community/directory/').then((r) => setStats((s) => ({ ...s, members: r.data.count || 0 }))).catch(() => {});
-    api.get('/community/districts/').then((r) => setStats((s) => ({ ...s, districts: (r.data || []).length }))).catch(() => {});
-    api.get('/community/problem-statements/').then((r) => setStats((s) => ({ ...s, problems: (r.data || []).length }))).catch(() => {});
+      }),
+      api.get('/community/matches/').then((r) => setTopMatches((r.data || []).slice(0, 3))),
+      api.get('/community/announcements/').then((r) => setAnnouncements((r.data || []).slice(0, 3))),
+      api.get('/community/directory/').then((r) => setStats((s) => ({ ...s, members: r.data.count || 0 }))),
+      api.get('/community/districts/').then((r) => setStats((s) => ({ ...s, districts: (r.data || []).length }))),
+      api.get('/community/problem-statements/').then((r) => setStats((s) => ({ ...s, problems: (r.data || []).length }))),
+    ]).then((results) => {
+      // Profile check failing means profile doesn't exist yet
+      if (results[0].status === 'rejected') setHasProfile(false);
+      // If critical calls fail, show error
+      const criticalFailed = results[3].status === 'rejected' && results[4].status === 'rejected';
+      if (criticalFailed) setError(true);
+      setLoading(false);
+    });
   }, []);
 
   const nav = [
-    { to: '/profile', icon: 'person', title: 'My Profile', desc: 'Update your district info and literacy challenges.' },
-    { to: '/directory', icon: 'groups', title: 'Directory', desc: 'Browse and search all community members.' },
     { to: '/matches', icon: 'hub', title: 'Find Matches', desc: 'Discover leaders facing similar challenges.' },
+    { to: '/directory', icon: 'groups', title: 'Directory', desc: 'Browse and search all community members.' },
     { to: '/messages', icon: 'chat', title: 'Messages', desc: 'Private conversations with your network.' },
+    { to: '/resources', icon: 'library_books', title: 'Resources', desc: 'Shared literacy tools, guides, and research.' },
+    { to: '/compare', icon: 'compare_arrows', title: 'Compare Districts', desc: 'Side-by-side demographic comparisons.' },
+    { to: '/analytics', icon: 'insights', title: 'Insights', desc: 'Community analytics and trends.' },
+    { to: '/profile', icon: 'person', title: 'My Profile', desc: 'Update your district info and challenges.' },
+    ...(user?.role !== 'member' ? [{ to: '/moderation', icon: 'shield', title: 'Moderation', desc: 'Review flagged content and manage users.' }] : []),
   ];
+
+  if (loading) {
+    return (
+      <main className="max-w-7xl mx-auto px-6 md:px-12 py-10">
+        <div className="mb-10">
+          <div className="h-8 w-72 bg-gray-100 rounded animate-pulse" />
+          <div className="h-4 w-56 bg-gray-50 rounded animate-pulse mt-3" />
+        </div>
+        <div className="grid grid-cols-3 gap-4 mb-10">
+          {[1, 2, 3].map((i) => <div key={i} className="bg-white border border-gray-100 rounded-xl p-5 h-24 animate-pulse" />)}
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => <div key={i} className="bg-white border border-gray-100 rounded-xl p-6 h-32 animate-pulse" />)}
+        </div>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="max-w-7xl mx-auto px-6 md:px-12 py-10">
+        <div className="text-center py-24 bg-white border border-gray-100 rounded-xl">
+          <span className="material-symbols-outlined text-gray-300 text-5xl mb-4 block">error</span>
+          <p className="font-headline font-bold text-lg">Something went wrong</p>
+          <p className="text-sm text-gray-500 mt-1">Unable to load dashboard data. Please try refreshing.</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="max-w-7xl mx-auto px-6 md:px-12 py-10">
@@ -51,7 +91,7 @@ export default function Dashboard() {
               <p className="text-sm text-emerald-700">Select your district and challenges to start getting matched.</p>
             </div>
           </div>
-          <Link to="/profile" className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-500 transition-all">
+          <Link to="/onboarding" className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-500 transition-all">
             Set Up Profile
           </Link>
         </div>
@@ -71,6 +111,24 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* Announcements */}
+      {announcements.length > 0 && (
+        <div className="mb-10 space-y-3">
+          {announcements.map((a) => (
+            <div key={a.id} className={`bg-white border rounded-xl p-5 flex items-start gap-4 ${a.pinned ? 'border-emerald-200 bg-emerald-50/50' : 'border-gray-100'}`}>
+              <span className="material-symbols-outlined text-emerald-600 mt-0.5">{a.pinned ? 'push_pin' : 'campaign'}</span>
+              <div className="min-w-0">
+                <h3 className="font-headline font-bold text-sm">{a.title}</h3>
+                <p className="text-sm text-gray-500 mt-1 line-clamp-2">{a.content}</p>
+                <p className="text-[11px] text-gray-400 mt-2">
+                  {a.author_detail?.first_name} {a.author_detail?.last_name} &middot; {new Date(a.created_at).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Quick Nav */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">

@@ -7,7 +7,7 @@ export default function ProtectedRoute({ children, moderatorOnly = false }) {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-24">
+      <div className="flex justify-center py-24" role="status" aria-label="Checking authentication">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
       </div>
     );

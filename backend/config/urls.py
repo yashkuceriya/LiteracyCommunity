@@ -7,4 +7,5 @@ urlpatterns = [
     path('api/community/', include('community.urls')),
     path('api/messaging/', include('messaging.urls')),
     path('api/moderation/', include('moderation.urls')),
+    path('api/resources/', include('resources.urls')),
 ]

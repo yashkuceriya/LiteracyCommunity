@@ -1,12 +1,14 @@
+import csv
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
-from django.db.models import Q
-from .models import District, ProblemStatement, MemberProfile
+from django.db.models import Q, Count, Avg
+from .models import District, ProblemStatement, MemberProfile, Announcement
 from .serializers import (
     DistrictSerializer, ProblemStatementSerializer,
-    MemberProfileSerializer, MatchResultSerializer,
+    MemberProfileSerializer, MatchResultSerializer, AnnouncementSerializer,
 )
 from .matching import find_matches
 
@@ -52,7 +54,7 @@ def my_profile(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def directory(request):
-    qs = MemberProfile.objects.filter(is_public=True).select_related('district', 'user').prefetch_related('problem_statements')
+    qs = MemberProfile.objects.filter(is_public=True, user__is_active=True).select_related('district', 'user').prefetch_related('problem_statements')
 
     search = request.query_params.get('search', '').strip()
     state = request.query_params.get('state')
@@ -77,7 +79,10 @@ def directory(request):
         qs = qs.filter(problem_statements__id=problem).distinct()
 
     page_size = 20
-    page = int(request.query_params.get('page', 1))
+    try:
+        page = max(1, int(request.query_params.get('page', 1)))
+    except (ValueError, TypeError):
+        page = 1
     start = (page - 1) * page_size
     total = qs.count()
     profiles = qs[start:start + page_size]
@@ -96,7 +101,10 @@ def matches(request):
     except MemberProfile.DoesNotExist:
         return Response({'error': 'Please complete your profile first.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    min_score = int(request.query_params.get('min_score', 10))
+    try:
+        min_score = max(0, min(100, int(request.query_params.get('min_score', 10))))
+    except (ValueError, TypeError):
+        min_score = 10
     results = find_matches(profile, min_score=min_score)
 
     data = [
@@ -114,3 +122,106 @@ def member_detail(request, pk):
     except MemberProfile.DoesNotExist:
         return Response({'error': 'Member not found.'}, status=status.HTTP_404_NOT_FOUND)
     return Response(MemberProfileSerializer(profile).data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def analytics(request):
+    """Community-wide analytics and insights."""
+    from messaging.models import Message, Conversation
+
+    total_members = MemberProfile.objects.filter(is_public=True, user__is_active=True).count()
+    total_districts = District.objects.count()
+    total_conversations = Conversation.objects.count()
+    total_messages = Message.objects.count()
+
+    by_type = dict(
+        MemberProfile.objects.filter(is_public=True, district__isnull=False)
+        .values_list('district__district_type')
+        .annotate(c=Count('id'))
+        .values_list('district__district_type', 'c')
+    )
+
+    by_state = list(
+        MemberProfile.objects.filter(is_public=True, district__isnull=False)
+        .values('district__state')
+        .annotate(count=Count('id'))
+        .order_by('-count')[:10]
+    )
+
+    top_problems = list(
+        ProblemStatement.objects.annotate(member_count=Count('members'))
+        .order_by('-member_count')
+        .values('id', 'title', 'category', 'member_count')[:10]
+    )
+
+    avg_frl = District.objects.aggregate(avg=Avg('free_reduced_lunch_pct'))['avg']
+    avg_esl = District.objects.aggregate(avg=Avg('esl_pct'))['avg']
+
+    return Response({
+        'total_members': total_members,
+        'total_districts': total_districts,
+        'total_conversations': total_conversations,
+        'total_messages': total_messages,
+        'members_by_district_type': by_type,
+        'members_by_state': by_state,
+        'top_problem_statements': top_problems,
+        'avg_free_reduced_lunch': round(float(avg_frl or 0), 1),
+        'avg_esl': round(float(avg_esl or 0), 1),
+    })
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def announcement_list(request):
+    if request.method == 'GET':
+        qs = Announcement.objects.select_related('author')[:20]
+        return Response(AnnouncementSerializer(qs, many=True).data)
+
+    if request.user.role not in ('moderator', 'admin'):
+        return Response({'error': 'Moderator access required.'}, status=status.HTTP_403_FORBIDDEN)
+    ser = AnnouncementSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+    ser.save(author=request.user)
+    return Response(ser.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def export_matches(request):
+    """Export matches as CSV download."""
+    try:
+        profile = request.user.profile
+    except MemberProfile.DoesNotExist:
+        return Response({'error': 'Complete your profile first.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    results = find_matches(profile, min_score=10)
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="literacy_matches.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['Name', 'Title', 'District', 'State', 'Type', 'Size', 'FRL%', 'ESL%', 'Match Score', 'Shared Challenges'])
+
+    for p, score, breakdown in results[:50]:
+        d = p.district
+        shared = breakdown.get('shared_problems', {}).get('count', 0)
+        writer.writerow([
+            p.user.get_full_name(), p.title,
+            d.name if d else '', d.state if d else '',
+            d.get_district_type_display() if d else '',
+            d.get_size_category_display() if d else '',
+            f"{float(d.free_reduced_lunch_pct):.1f}" if d else '',
+            f"{float(d.esl_pct):.1f}" if d else '',
+            score, shared,
+        ])
+    return response
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def compare_districts(request):
+    """Compare two or more districts side-by-side."""
+    district_ids = request.data.get('district_ids', [])
+    if len(district_ids) < 2:
+        return Response({'error': 'Provide at least 2 district IDs.'}, status=status.HTTP_400_BAD_REQUEST)
+    districts = District.objects.filter(pk__in=district_ids[:5])
+    return Response(DistrictSerializer(districts, many=True).data)

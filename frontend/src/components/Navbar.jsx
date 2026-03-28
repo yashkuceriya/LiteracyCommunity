@@ -32,10 +32,11 @@ export default function Navbar() {
             Literacy Leaders
           </Link>
           {user && (
-            <div className="hidden md:flex items-center gap-6">
+            <div className="hidden lg:flex items-center gap-5">
               <Link to="/dashboard" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Dashboard</Link>
               <Link to="/directory" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Directory</Link>
               <Link to="/matches" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Matches</Link>
+              <Link to="/resources" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Resources</Link>
               <Link to="/messages" className="relative text-sm text-gray-600 hover:text-gray-900 transition-colors">
                 Messages
                 {unreadCount > 0 && (
@@ -44,6 +45,7 @@ export default function Navbar() {
                   </span>
                 )}
               </Link>
+              <Link to="/analytics" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Insights</Link>
               {user.role !== 'member' && (
                 <Link to="/moderation" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Moderation</Link>
               )}
@@ -90,7 +92,7 @@ export default function Navbar() {
             </div>
           )}
 
-          <button className="md:hidden p-2" onClick={() => setMenuOpen(!menuOpen)}>
+          <button className="lg:hidden p-2" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle navigation menu" aria-expanded={menuOpen}>
             <span className="material-symbols-outlined text-xl">
               {menuOpen ? 'close' : 'menu'}
             </span>
@@ -99,12 +101,15 @@ export default function Navbar() {
       </nav>
 
       {menuOpen && user && (
-        <div className="md:hidden px-6 pb-4 space-y-1 border-t border-gray-100">
+        <div className="lg:hidden px-6 pb-4 space-y-1 border-t border-gray-100">
           {[
             ['/dashboard', 'Dashboard'],
             ['/directory', 'Directory'],
             ['/matches', 'Matches'],
+            ['/resources', 'Resources'],
             ['/messages', `Messages${unreadCount > 0 ? ` (${unreadCount})` : ''}`],
+            ['/analytics', 'Insights'],
+            ['/compare', 'Compare Districts'],
             ['/profile', 'My Profile'],
             ...(user.role !== 'member' ? [['/moderation', 'Moderation']] : []),
           ].map(([to, label]) => (

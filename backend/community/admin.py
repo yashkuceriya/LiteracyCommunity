@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import District, ProblemStatement, MemberProfile
+from .models import District, ProblemStatement, MemberProfile, Announcement
 
 
 @admin.register(District)
@@ -21,3 +21,9 @@ class MemberProfileAdmin(admin.ModelAdmin):
     list_filter = ['is_public', 'district__state']
     search_fields = ['user__first_name', 'user__last_name', 'title']
     filter_horizontal = ['problem_statements']
+
+
+@admin.register(Announcement)
+class AnnouncementAdmin(admin.ModelAdmin):
+    list_display = ['title', 'author', 'pinned', 'created_at']
+    list_filter = ['pinned']
