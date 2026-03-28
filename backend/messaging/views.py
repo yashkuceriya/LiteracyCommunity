@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.db.models import Q, Max, Count, Subquery, OuterRef
 from accounts.models import User
 from .models import Conversation, Message
 from .serializers import ConversationListSerializer, ConversationDetailSerializer, MessageSerializer
@@ -11,7 +12,18 @@ from .serializers import ConversationListSerializer, ConversationDetailSerialize
 @permission_classes([IsAuthenticated])
 def conversation_list(request):
     if request.method == 'GET':
-        convos = Conversation.objects.filter(participants=request.user).prefetch_related('participants', 'messages')
+        convos = (
+            Conversation.objects.filter(participants=request.user)
+            .prefetch_related('participants')
+            .annotate(
+                _unread_count=Count(
+                    'messages',
+                    filter=Q(messages__is_read=False) & ~Q(messages__sender=request.user),
+                ),
+                _last_message_time=Max('messages__created_at'),
+            )
+            .order_by('-_last_message_time')
+        )
         ser = ConversationListSerializer(convos, many=True, context={'request': request})
         return Response(ser.data)
 
@@ -52,12 +64,15 @@ def conversation_detail(request, pk):
     except Conversation.DoesNotExist:
         return Response({'error': 'Conversation not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Mark messages as read
-    conv.messages.filter(is_read=False).exclude(sender=request.user).update(is_read=True)
+    is_participant = request.user in conv.participants.all()
+
+    # Only mark messages as read if the user is an actual participant
+    if is_participant:
+        conv.messages.filter(is_read=False).exclude(sender=request.user).update(is_read=True)
 
     data = ConversationDetailSerializer(conv).data
-    data['is_participant'] = request.user in conv.participants.all()
-    data['is_moderator_view'] = is_mod and not data['is_participant']
+    data['is_participant'] = is_participant
+    data['is_moderator_view'] = is_mod and not is_participant
     return Response(data)
 
 

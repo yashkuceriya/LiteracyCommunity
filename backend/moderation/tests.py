@@ -73,3 +73,47 @@ class ModerationTests(TestCase):
             'action': 'warn', 'reason': 'Trying to hack',
         }, content_type='application/json')
         self.assertEqual(resp.status_code, 403)
+
+    def test_non_participant_cannot_flag_message(self):
+        """Users can only flag messages in conversations they belong to."""
+        outsider = User.objects.create_user(username='outsider', email='o@test.com', password='pass1234')
+        self.client.login(username='outsider', password='pass1234')
+        resp = self.client.post('/api/moderation/flag/', {
+            'message_id': self.msg.pk, 'reason': 'Spam',
+        }, content_type='application/json')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_cannot_action_self(self):
+        """Moderators cannot take action on themselves."""
+        self.client.login(username='mod', password='pass1234')
+        resp = self.client.post(f'/api/moderation/users/{self.mod.pk}/action/', {
+            'action': 'warn', 'reason': 'Testing self',
+        }, content_type='application/json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_cannot_action_admin(self):
+        """Moderators cannot take action on admins."""
+        admin = User.objects.create_user(username='admin', email='a@test.com', password='pass1234', role='admin')
+        self.client.login(username='mod', password='pass1234')
+        resp = self.client.post(f'/api/moderation/users/{admin.pk}/action/', {
+            'action': 'warn', 'reason': 'Testing hierarchy',
+        }, content_type='application/json')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_moderator_cannot_action_other_moderator(self):
+        """Moderators cannot take action on other moderators (only admins can)."""
+        mod2 = User.objects.create_user(username='mod2', email='m2@test.com', password='pass1234', role='moderator')
+        self.client.login(username='mod', password='pass1234')
+        resp = self.client.post(f'/api/moderation/users/{mod2.pk}/action/', {
+            'action': 'warn', 'reason': 'Testing hierarchy',
+        }, content_type='application/json')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_admin_can_action_moderator(self):
+        """Admins can take action on moderators."""
+        admin = User.objects.create_user(username='admin', email='a@test.com', password='pass1234', role='admin')
+        self.client.login(username='admin', password='pass1234')
+        resp = self.client.post(f'/api/moderation/users/{self.mod.pk}/action/', {
+            'action': 'warn', 'reason': 'Policy violation',
+        }, content_type='application/json')
+        self.assertEqual(resp.status_code, 201)

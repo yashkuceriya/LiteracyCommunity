@@ -25,10 +25,17 @@ class ConversationListSerializer(serializers.ModelSerializer):
         fields = ['id', 'participants', 'last_message', 'unread_count', 'created_at', 'updated_at']
 
     def get_last_message(self, obj):
-        msg = obj.messages.order_by('-created_at').first()
-        return MessageSerializer(msg).data if msg else None
+        # Use prefetched messages to avoid extra query
+        messages = obj.messages.all()
+        if messages:
+            msg = max(messages, key=lambda m: m.created_at)
+            return MessageSerializer(msg).data
+        return None
 
     def get_unread_count(self, obj):
+        # Use annotated value from view when available
+        if hasattr(obj, '_unread_count'):
+            return obj._unread_count
         request = self.context.get('request')
         if request and hasattr(request, 'user') and request.user:
             return obj.messages.filter(is_read=False).exclude(sender=request.user).count()

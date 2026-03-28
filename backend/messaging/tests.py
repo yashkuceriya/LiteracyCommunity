@@ -65,3 +65,31 @@ class MessagingTests(TestCase):
         self.client.login(username='mod', password='pass1234')
         resp = self.client.get(f'/api/messaging/conversations/{conv.pk}/')
         self.assertEqual(resp.status_code, 200)
+
+    def test_moderator_view_does_not_mark_messages_read(self):
+        """Moderator viewing a conversation must not clear unread state for participants."""
+        conv = Conversation.objects.create()
+        conv.participants.add(self.user1, self.user2)
+        Message.objects.create(conversation=conv, sender=self.user1, content='Hey')
+        Message.objects.create(conversation=conv, sender=self.user1, content='You there?')
+
+        # Moderator views the conversation
+        self.client.login(username='mod', password='pass1234')
+        self.client.get(f'/api/messaging/conversations/{conv.pk}/')
+
+        # user2's unread count should still be 2
+        self.client.login(username='bob', password='pass1234')
+        resp = self.client.get('/api/messaging/unread-count/')
+        self.assertEqual(resp.json()['unread_count'], 2)
+
+    def test_participant_view_marks_messages_read(self):
+        """Actual participant viewing a conversation should mark messages as read."""
+        conv = Conversation.objects.create()
+        conv.participants.add(self.user1, self.user2)
+        Message.objects.create(conversation=conv, sender=self.user1, content='Hey')
+
+        self.client.login(username='bob', password='pass1234')
+        self.client.get(f'/api/messaging/conversations/{conv.pk}/')
+
+        resp = self.client.get('/api/messaging/unread-count/')
+        self.assertEqual(resp.json()['unread_count'], 0)

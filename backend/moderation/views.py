@@ -22,9 +22,13 @@ def flag_message(request):
     if not message_id or not reason:
         return Response({'error': 'message_id and reason are required.'}, status=status.HTTP_400_BAD_REQUEST)
     try:
-        msg = Message.objects.get(pk=message_id)
+        msg = Message.objects.select_related('conversation').get(pk=message_id)
     except Message.DoesNotExist:
         return Response({'error': 'Message not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Only participants in the conversation can flag its messages
+    if not msg.conversation.participants.filter(pk=request.user.pk).exists():
+        return Response({'error': 'You can only flag messages in your own conversations.'}, status=status.HTTP_403_FORBIDDEN)
 
     flag = FlaggedMessage.objects.create(message=msg, flagged_by=request.user, reason=reason)
     return Response(FlaggedMessageSerializer(flag).data, status=status.HTTP_201_CREATED)
@@ -86,6 +90,13 @@ def user_action(request, pk):
         target = User.objects.get(pk=pk)
     except User.DoesNotExist:
         return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if target == request.user:
+        return Response({'error': 'Cannot take action on yourself.'}, status=status.HTTP_400_BAD_REQUEST)
+    if target.role == 'admin':
+        return Response({'error': 'Cannot take action on administrators.'}, status=status.HTTP_403_FORBIDDEN)
+    if target.role == 'moderator' and request.user.role != 'admin':
+        return Response({'error': 'Only admins can take action on moderators.'}, status=status.HTTP_403_FORBIDDEN)
 
     action = request.data.get('action')
     reason = request.data.get('reason', '').strip()
