@@ -9,7 +9,7 @@ echo "Setting up backend..."
 cd backend
 python3 -m venv venv
 source venv/bin/activate
-pip install -q django djangorestframework django-cors-headers
+pip install -q -r requirements.txt
 python manage.py makemigrations accounts community messaging moderation
 python manage.py migrate
 python manage.py seed_data

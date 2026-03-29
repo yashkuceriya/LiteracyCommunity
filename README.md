@@ -99,11 +99,20 @@ cd backend && source venv/bin/activate && python manage.py runserver
 cd frontend && npm run dev
 ```
 
-### Docker
+### Docker (Production)
 
 ```bash
-docker compose up
-# App available at http://localhost:5173
+docker compose up --build
+# App available at http://localhost (port 80)
+# Gunicorn + nginx, static assets cached, security headers enabled
+```
+
+### Docker (Development)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# Backend:  http://localhost:8000 (Django runserver with hot reload)
+# Frontend: http://localhost:5173 (Vite dev server with HMR)
 ```
 
 ### Run Tests
